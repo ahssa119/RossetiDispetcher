@@ -130,7 +130,7 @@
         .btn-update:hover {
             background: #218838;
         }
-        
+
         /* Кнопка сворачивания */
         .toggle-sidebar {
             position: absolute;
@@ -161,12 +161,12 @@
         .sidebar.collapsed .toggle-sidebar:hover {
             transform: rotate(180deg) scale(1.1);
         }
-        
+
         /* Скрываем атрибуцию карты */
         .leaflet-control-attribution {
             display: none !important;
         }
-        
+
         /* Стили для меток */
         .municipality-dot {
             background: #007bff;
@@ -192,7 +192,7 @@
             height: 14px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
-        
+
         /* Легенда карты */
         .legend {
             position: absolute;
@@ -221,7 +221,7 @@
             margin-right: 8px;
             border-radius: 2px;
         }
-        
+
         /* Панель управления рисками */
         .risk-controls {
             margin: 15px 0;
@@ -280,7 +280,7 @@
             border-color: #6f42c1;
             color: #6f42c1;
         }
-        
+
         .risk-indicator {
             display: inline-block;
             width: 10px;
@@ -292,7 +292,7 @@
         .risk-medium { background-color: #ffc107; }
         .risk-high { background-color: #fd7e14; }
         .risk-critical { background-color: #dc3545; }
-        
+
         /* Стили для попапов */
         .risk-popup {
             min-width: 280px;
@@ -397,10 +397,10 @@
     <div class="container">
         <div class="sidebar" id="sidebar">
             <div class="toggle-sidebar" onclick="toggleSidebar()">‹</div>
-            
+
             <div class="sidebar-content">
                 <h1>Мониторинг погодных рисков</h1>
-                
+
                 <div class="search-box">
                     <input type="text" class="search-input" placeholder="Поиск муниципалитета..." id="searchInput">
                 </div>
@@ -428,8 +428,8 @@
                     </div>
                 </div>
 
-                <div id="apiStatus" class="api-status" style="display: none;">
-                    <!-- Статус API будет отображаться здесь -->
+                <div id="apiStatus" class="api-status status-offline">
+                    ⚠️ Используются демо-данные
                 </div>
 
                 <div class="controls">
@@ -510,17 +510,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Конфигурация API
-        const API_BASE_URL = 'http://localhost:8005/api';
-
-        // Инициализация карты
-        const map = L.map('map').setView([59.2181, 39.8886], 8);
-
-        // Добавляем слой карты
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: ''
-        }).addTo(map);
-
         // Данные муниципалитетов Вологодской области
         const municipalities = [
             // Городские округа
@@ -565,21 +554,18 @@
         let riskOverlayVisible = true;
         let autoUpdateInterval = null;
 
-        // Функция для сворачивания/разворачивания панели
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebar.classList.toggle('collapsed');
-            
-            // Обновляем карту при изменении размера
-            setTimeout(() => {
-                map.invalidateSize();
-            }, 300);
-        }
+        // Инициализация карты
+        const map = L.map('map').setView([59.2181, 39.8886], 8);
+
+        // Добавляем слой карты
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: ''
+        }).addTo(map);
 
         // Прямоугольные границы Вологодской области
         const vologdaRegionBounds = [
             [58.2, 34.5],  // юго-запад
-            [58.2, 48.0],  // юго-восток  
+            [58.2, 48.0],  // юго-восток
             [62.0, 48.0],  // северо-восток
             [62.0, 34.5]   // северо-запад
         ];
@@ -592,10 +578,10 @@
             const bounds = vologdaRegionBounds;
             const southWest = bounds[0];
             const northEast = bounds[2];
-            
+
             const latStep = 0.3;
             const lngStep = 0.5;
-            
+
             for (let lat = southWest[0]; lat < northEast[0]; lat += latStep) {
                 for (let lng = southWest[1]; lng < northEast[1]; lng += lngStep) {
                     grid.push({
@@ -636,30 +622,36 @@
             9: 'Критический', 10: 'Чрезвычайный'
         };
 
-        // Функции для работы с API
-        async function fetchWeatherData() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/weather/current`);
-                if (!response.ok) throw new Error('API не отвечает');
-                const data = await response.json();
-                return data.municipalities;
-            } catch (error) {
-                console.error('Ошибка получения данных с API:', error);
-                showApiStatus('offline', 'API недоступен. Используются демо-данные.');
-                return null;
-            }
+        // Демо-функции для замены API
+        function getDemoWeatherData() {
+            return {
+                "timestamp": new Date().toISOString(),
+                "municipalities": municipalities.map(m => ({
+                    "name": m.name,
+                    "risk_level": Math.floor(Math.random() * 4) + 2,
+                    "weather": {
+                        "wind": parseFloat((Math.random() * 10 + 2).toFixed(1)),
+                        "temperature": parseFloat((Math.random() * 15 - 5).toFixed(1)),
+                        "precipitation": parseFloat((Math.random() * 3).toFixed(1)),
+                        "humidity": Math.floor(Math.random() * 30 + 60),
+                        "pressure": parseFloat((Math.random() * 40 + 1000).toFixed(1))
+                    },
+                    "coordinates": m.coords,
+                    "from_api": false
+                })),
+                "data_source": "demo"
+            };
         }
 
-        async function fetchRiskMatrix() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/risk/matrix`);
-                if (!response.ok) throw new Error('API не отвечает');
-                const data = await response.json();
-                return data.grid;
-            } catch (error) {
-                console.error('Ошибка получения матрицы рисков:', error);
-                return null;
-            }
+        function getDemoRiskMatrix() {
+            return {
+                "timestamp": new Date().toISOString(),
+                "grid": riskGrid.map(cell => ({
+                    ...cell,
+                    "riskLevel": Math.floor(Math.random() * 4) + 2
+                })),
+                "bounds": vologdaRegionBounds
+            };
         }
 
         function showApiStatus(status, message) {
@@ -667,12 +659,6 @@
             statusElement.innerHTML = message;
             statusElement.className = `api-status status-${status}`;
             statusElement.style.display = 'block';
-            
-            if (status === 'online') {
-                setTimeout(() => {
-                    statusElement.style.display = 'none';
-                }, 3000);
-            }
         }
 
         function showLoading(show) {
@@ -682,81 +668,73 @@
 
         // Инициализация данных о рисках
         async function initializeRiskData() {
-            const apiData = await fetchWeatherData();
-            
-            if (apiData) {
-                showApiStatus('online', '✅ Данные успешно загружены с API');
-                
-                municipalities.forEach(municipality => {
-                    const apiMunicipality = apiData.find(m => m.name === municipality.name);
-                    if (apiMunicipality) {
-                        currentRiskData[municipality.name] = {
-                            riskLevel: apiMunicipality.risk_level,
-                            weather: {
-                                wind: apiMunicipality.weather.wind_speed,
-                                temperature: apiMunicipality.weather.temperature,
-                                precipitation: apiMunicipality.weather.precipitation,
-                                humidity: apiMunicipality.weather.humidity,
-                                pressure: apiMunicipality.weather.pressure || 1013.0
-                            },
-                            fromApi: true
-                        };
-                    } else {
-                        currentRiskData[municipality.name] = {
-                            riskLevel: 2,
-                            weather: {
-                                wind: 3,
-                                temperature: -5,
-                                precipitation: 0.5,
-                                humidity: 80,
-                                pressure: 1013.0
-                            },
-                            fromApi: false
-                        };
-                    }
-                });
-                
-                const riskMatrix = await fetchRiskMatrix();
-                if (riskMatrix) {
-                    riskGrid = riskMatrix;
-                }
-            } else {
-                municipalities.forEach(municipality => {
+            const demoData = getDemoWeatherData();
+
+            municipalities.forEach(municipality => {
+                const demoMunicipality = demoData.municipalities.find(m => m.name === municipality.name);
+                if (demoMunicipality) {
                     currentRiskData[municipality.name] = {
-                        riskLevel: 2,
-                        weather: {
-                            wind: 3,
-                            temperature: -5,
-                            precipitation: 0.5,
-                            humidity: 80,
-                            pressure: 1013.0
-                        },
+                        riskLevel: demoMunicipality.risk_level,
+                        weather: demoMunicipality.weather,
                         fromApi: false
                     };
-                });
-            }
+                }
+            });
+
+            const riskMatrix = getDemoRiskMatrix();
+            riskGrid = riskMatrix.grid;
         }
 
         // Функция для обновления данных
         async function updateWeatherData() {
             showLoading(true);
             try {
-                await initializeRiskData();
+                // Используем специальный эндпоинт для обновления
+                const response = await fetch('/api/weather/update');
+                if (!response.ok) throw new Error('API не отвечает');
+
+                const data = await response.json();
+
+                // Обновляем данные муниципалитетов
+                municipalities.forEach(municipality => {
+                    const apiMunicipality = data.municipalities.find(m => m.name === municipality.name);
+                    if (apiMunicipality) {
+                        currentRiskData[municipality.name] = {
+                            riskLevel: apiMunicipality.risk_level,
+                            weather: apiMunicipality.weather,
+                            fromApi: apiMunicipality.from_api
+                        };
+                    }
+                });
+
+                // Получаем обновленную матрицу рисков
+                const riskResponse = await fetch('/api/risk/matrix');
+                if (riskResponse.ok) {
+                    const riskData = await riskResponse.json();
+                    riskGrid = riskData.grid; // ОБНОВЛЯЕМ СЕТКУ РИСКОВ
+                }
+
                 updatePopups();
-                createRiskOverlay();
+                createRiskOverlay(); // ПЕРЕСОЗДАЕМ OVERLAY С НОВЫМИ ДАННЫМИ
                 renderMunicipalitiesList();
-                showApiStatus('online', '✅ Данные успешно обновлены');
+
+                if (data.data_source === 'realtime') {
+                    showApiStatus('online', `✅ Реальные данные (${data.successful_requests}/${data.total_requests})`);
+                } else {
+                    showApiStatus('offline', '⚠️ Используются демо-данные');
+                }
             } catch (error) {
+                console.error('Ошибка обновления данных:', error);
                 showApiStatus('offline', '❌ Ошибка обновления данных');
             } finally {
                 showLoading(false);
             }
         }
 
-        // Новые функции для управления данными
+        // Функции для управления данными
         function applyWeatherScenario(scenario) {
             showApiStatus('offline', '⚠️ Используются демо-данные');
-            
+
             switch(scenario) {
                 case 'excellent':
                     applyExcellentConditions();
@@ -773,10 +751,8 @@
                 case 'gradient':
                     applyGradientConditions();
                     break;
-                default:
-                    applyWeatherScenarioOld(scenario);
             }
-            
+
             updatePopups();
             createRiskOverlay();
             renderMunicipalitiesList();
@@ -786,7 +762,7 @@
         function applyExcellentConditions() {
             municipalities.forEach(municipality => {
                 const riskData = currentRiskData[municipality.name];
-                riskData.riskLevel = 2; // Низкий риск
+                riskData.riskLevel = 2;
                 riskData.weather = {
                     wind: 2,
                     temperature: 5,
@@ -796,15 +772,14 @@
                 };
                 riskData.fromApi = false;
             });
-            
-            updateRiskGridUniform(2); // Все ячейки зеленые
+            updateRiskGridUniform(2);
         }
 
         // Неудовлетворительные условия - всё желтое
         function applySatisfactoryConditions() {
             municipalities.forEach(municipality => {
                 const riskData = currentRiskData[municipality.name];
-                riskData.riskLevel = 5; // Средний риск
+                riskData.riskLevel = 5;
                 riskData.weather = {
                     wind: 8,
                     temperature: -2,
@@ -814,15 +789,14 @@
                 };
                 riskData.fromApi = false;
             });
-            
-            updateRiskGridUniform(5); // Все ячейки желтые
+            updateRiskGridUniform(5);
         }
 
         // Плохие условия - всё оранжевое
         function applyPoorConditions() {
             municipalities.forEach(municipality => {
                 const riskData = currentRiskData[municipality.name];
-                riskData.riskLevel = 7; // Высокий риск
+                riskData.riskLevel = 7;
                 riskData.weather = {
                     wind: 12,
                     temperature: -8,
@@ -832,15 +806,14 @@
                 };
                 riskData.fromApi = false;
             });
-            
-            updateRiskGridUniform(7); // Все ячейки оранжевые
+            updateRiskGridUniform(7);
         }
 
         // Опасные условия - всё красное
         function applyDangerousConditions() {
             municipalities.forEach(municipality => {
                 const riskData = currentRiskData[municipality.name];
-                riskData.riskLevel = 9; // Критический риск
+                riskData.riskLevel = 9;
                 riskData.weather = {
                     wind: 18,
                     temperature: -15,
@@ -850,117 +823,78 @@
                 };
                 riskData.fromApi = false;
             });
-            
-            updateRiskGridUniform(9); // Все ячейки красные
+            updateRiskGridUniform(9);
         }
 
-        // Все типы погодных условий - одинаковые полосы каждого из 4 цветов
+        // Все типы погодных условий - одинаковые полосы
         function applyGradientConditions() {
-            // Находим границы области
             const westLng = 34.5;
             const eastLng = 48.0;
             const totalWidth = eastLng - westLng;
-            
-            // Создаем 4 равные полосы по долготе
             const stripeWidth = totalWidth / 4;
-            
+
             municipalities.forEach(municipality => {
                 const riskData = currentRiskData[municipality.name];
                 const lng = municipality.coords[1];
-                
-                // Определяем в какой полосе находится муниципалитет
                 const positionFromWest = lng - westLng;
                 let riskLevel;
-                
-                if (positionFromWest < stripeWidth) {
-                    riskLevel = 9; // Красная полоса - запад
-                } else if (positionFromWest < stripeWidth * 2) {
-                    riskLevel = 7; // Оранжевая полоса
-                } else if (positionFromWest < stripeWidth * 3) {
-                    riskLevel = 5; // Желтая полоса
-                } else {
-                    riskLevel = 2; // Зеленая полоса - восток
-                }
-                
+
+                if (positionFromWest < stripeWidth) riskLevel = 9;
+                else if (positionFromWest < stripeWidth * 2) riskLevel = 7;
+                else if (positionFromWest < stripeWidth * 3) riskLevel = 5;
+                else riskLevel = 2;
+
                 riskData.riskLevel = riskLevel;
-                
-                // Погодные условия в зависимости от уровня риска
                 riskData.weather = getWeatherForRiskLevel(riskData.riskLevel);
                 riskData.fromApi = false;
             });
-            
             updateRiskGridStripes();
         }
 
-        // Вспомогательная функция для получения погоды по уровню риска
         function getWeatherForRiskLevel(riskLevel) {
             switch(riskLevel) {
-                case 2: // Зеленый
-                    return { wind: 2, temperature: 5, precipitation: 0, humidity: 60, pressure: 1013.0 };
-                case 3: case 4:
-                    return { wind: 4, temperature: 2, precipitation: 1, humidity: 65, pressure: 1008.0 };
-                case 5: case 6: // Желтый
-                    return { wind: 8, temperature: -2, precipitation: 2, humidity: 75, pressure: 1005.0 };
-                case 7: case 8: // Оранжевый
-                    return { wind: 12, temperature: -8, precipitation: 5, humidity: 85, pressure: 995.0 };
-                case 9: case 10: // Красный
-                    return { wind: 18, temperature: -15, precipitation: 10, humidity: 90, pressure: 985.0 };
-                default:
-                    return { wind: 5, temperature: 0, precipitation: 1, humidity: 70, pressure: 1010.0 };
+                case 2: return { wind: 2, temperature: 5, precipitation: 0, humidity: 60, pressure: 1013.0 };
+                case 3: case 4: return { wind: 4, temperature: 2, precipitation: 1, humidity: 65, pressure: 1008.0 };
+                case 5: case 6: return { wind: 8, temperature: -2, precipitation: 2, humidity: 75, pressure: 1005.0 };
+                case 7: case 8: return { wind: 12, temperature: -8, precipitation: 5, humidity: 85, pressure: 995.0 };
+                case 9: case 10: return { wind: 18, temperature: -15, precipitation: 10, humidity: 90, pressure: 985.0 };
+                default: return { wind: 5, temperature: 0, precipitation: 1, humidity: 70, pressure: 1010.0 };
             }
         }
 
-        // Обновление сетки рисков для равномерных условий
         function updateRiskGridUniform(riskLevel) {
             riskGrid.forEach(cell => {
                 cell.riskLevel = riskLevel;
             });
         }
 
-        // Обновление сетки рисков для полосатого режима
         function updateRiskGridStripes() {
             const westLng = 34.5;
             const eastLng = 48.0;
             const totalWidth = eastLng - westLng;
             const stripeWidth = totalWidth / 4;
-            
+
             riskGrid.forEach(cell => {
                 const centerLng = (cell.bounds[0][1] + cell.bounds[1][1]) / 2;
                 const positionFromWest = centerLng - westLng;
                 let riskLevel;
-                
-                if (positionFromWest < stripeWidth) {
-                    riskLevel = 9; // Красная полоса
-                } else if (positionFromWest < stripeWidth * 2) {
-                    riskLevel = 7; // Оранжевая полоса
-                } else if (positionFromWest < stripeWidth * 3) {
-                    riskLevel = 5; // Желтая полоса
-                } else {
-                    riskLevel = 2; // Зеленая полоса
-                }
-                
+
+                if (positionFromWest < stripeWidth) riskLevel = 9;
+                else if (positionFromWest < stripeWidth * 2) riskLevel = 7;
+                else if (positionFromWest < stripeWidth * 3) riskLevel = 5;
+                else riskLevel = 2;
+
                 cell.riskLevel = riskLevel;
             });
         }
 
-        // Сохраните старую функцию для обратной совместимости
-        function applyWeatherScenarioOld(scenario) {
-            municipalities.forEach(municipality => {
-                const riskData = currentRiskData[municipality.name];
-                applyScenarioToRisk(riskData, municipality.coords, scenario);
-                riskData.fromApi = false;
-            });
-            
-            riskGrid.forEach(cell => {
-                const centerLat = (cell.bounds[0][0] + cell.bounds[1][0]) / 2;
-                const centerLng = (cell.bounds[0][1] + cell.bounds[1][1]) / 2;
-                
-                const nearestMunicipality = findNearestMunicipality(centerLat, centerLng);
-                if (nearestMunicipality) {
-                    const municipalityRisk = currentRiskData[nearestMunicipality.name];
-                    cell.riskLevel = municipalityRisk.riskLevel;
-                }
-            });
+        // Функция для сворачивания/разворачивания панели
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('collapsed');
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 300);
         }
 
         // Создание overlay с закраской всей области
@@ -988,11 +922,11 @@
                 const cellBounds = cell.bounds;
                 const cellTopLeft = latLngToPixel(cellBounds[1][0], cellBounds[0][1]);
                 const cellBottomRight = latLngToPixel(cellBounds[0][0], cellBounds[1][1]);
-                
+
                 const color = riskColors[cell.riskLevel];
                 const width = cellBottomRight.x - cellTopLeft.x;
                 const height = cellBottomRight.y - cellTopLeft.y;
-                
+
                 if (width > 0 && height > 0) {
                     ctx.fillStyle = color + 'aa';
                     ctx.fillRect(cellTopLeft.x, cellTopLeft.y, width, height);
@@ -1014,7 +948,7 @@
         function showRegionPopup(point) {
             const cell = findCellAtPoint(point);
             const nearestMunicipality = findNearestMunicipality(point.lat, point.lng);
-            
+
             let riskLevel = cell ? cell.riskLevel : 2;
             let weatherData = {
                 wind: 3,
@@ -1024,17 +958,17 @@
                 pressure: 1013.0
             };
             let fromApi = false;
-            
+
             if (nearestMunicipality) {
                 const municipalityRisk = currentRiskData[nearestMunicipality.name];
                 riskLevel = municipalityRisk.riskLevel;
                 weatherData = municipalityRisk.weather;
                 fromApi = municipalityRisk.fromApi || false;
             }
-            
+
             const color = riskColors[riskLevel];
             const riskText = riskTexts[riskLevel];
-            
+
             const popupContent = `
                 <div class="risk-popup">
                     <div class="risk-level" style="background-color: ${color};">${riskText} риск</div>
@@ -1070,7 +1004,7 @@
                     </div>
                 </div>
             `;
-            
+
             L.popup()
                 .setLatLng(point)
                 .setContent(popupContent)
@@ -1090,26 +1024,26 @@
         function findNearestMunicipality(lat, lng) {
             let nearest = null;
             let minDistance = Infinity;
-            
+
             municipalities.forEach(municipality => {
                 const distance = Math.sqrt(
-                    Math.pow(municipality.coords[0] - lat, 2) + 
+                    Math.pow(municipality.coords[0] - lat, 2) +
                     Math.pow(municipality.coords[1] - lng, 2)
                 );
-                
+
                 if (distance < minDistance) {
                     minDistance = distance;
                     nearest = municipality;
                 }
             });
-            
+
             return nearest;
         }
 
         // Переключение видимости overlay
         function toggleRiskOverlay() {
             const btn = document.getElementById('toggleRiskOverlayBtn');
-            
+
             if (riskOverlayVisible) {
                 map.removeLayer(riskOverlay);
                 btn.textContent = 'Показать overlay';
@@ -1124,10 +1058,10 @@
         // Создаем маркеры для муниципалитетов
         function createMarkers() {
             markers.length = 0;
-            
+
             municipalities.forEach(municipality => {
                 let iconClass, iconSize;
-                
+
                 if (municipality.type === 'city') {
                     if (municipality.name === 'Вологда') {
                         iconClass = 'vologda-dot';
@@ -1149,7 +1083,7 @@
 
                 const marker = L.marker(municipality.coords, { icon: customIcon })
                     .bindPopup(createMunicipalityPopup(municipality));
-                
+
                 markers.push({
                     marker: marker,
                     municipality: municipality
@@ -1163,7 +1097,7 @@
             const color = riskColors[risk.riskLevel];
             const riskText = riskTexts[risk.riskLevel];
             const fromApi = risk.fromApi || false;
-            
+
             return `
                 <div class="risk-popup">
                     <div class="risk-level" style="background-color: ${color};">${riskText} риск</div>
@@ -1200,108 +1134,6 @@
             `;
         }
 
-        // Применение сценария погодных условий (демо-режим)
-        function applyScenarioToRisk(riskData, coords, scenario) {
-            riskData.weather = {
-                wind: 3,
-                temperature: -5,
-                precipitation: 0.5,
-                humidity: 80,
-                pressure: 1013.0
-            };
-            
-            let weatherRisk = 2;
-
-            switch(scenario) {
-                case 'normal':
-                    weatherRisk = 2;
-                    break;
-                case 'wind':
-                    if (coords[1] < 40) {
-                        riskData.weather.wind = 18;
-                        weatherRisk = 7;
-                    } else {
-                        riskData.weather.wind = 8;
-                        weatherRisk = 4;
-                    }
-                    break;
-                case 'snow':
-                    if (coords[0] > 60) {
-                        riskData.weather.precipitation = 8;
-                        riskData.weather.temperature = -12;
-                        weatherRisk = 7;
-                    } else if (coords[0] > 59) {
-                        riskData.weather.precipitation = 5;
-                        riskData.weather.temperature = -8;
-                        weatherRisk = 5;
-                    } else {
-                        riskData.weather.precipitation = 3;
-                        riskData.weather.temperature = -5;
-                        weatherRisk = 3;
-                    }
-                    break;
-                case 'ice':
-                    if (coords[0] > 59 && coords[0] < 60.5 && coords[1] > 39 && coords[1] < 42) {
-                        riskData.weather.temperature = -3;
-                        riskData.weather.humidity = 95;
-                        riskData.weather.precipitation = 2;
-                        weatherRisk = 8;
-                    } else if (coords[0] > 58.5 && coords[0] < 61 && coords[1] > 38 && coords[1] < 43) {
-                        riskData.weather.temperature = -5;
-                        riskData.weather.humidity = 90;
-                        riskData.weather.precipitation = 1;
-                        weatherRisk = 6;
-                    } else {
-                        riskData.weather.temperature = -7;
-                        riskData.weather.humidity = 85;
-                        weatherRisk = 4;
-                    }
-                    break;
-                case 'storm':
-                    if (coords[0] < 59.5) {
-                        riskData.weather.wind = 15;
-                        riskData.weather.precipitation = 12;
-                        weatherRisk = 7;
-                    } else if (coords[0] < 60) {
-                        riskData.weather.wind = 12;
-                        riskData.weather.precipitation = 8;
-                        weatherRisk = 5;
-                    } else {
-                        riskData.weather.wind = 8;
-                        riskData.weather.precipitation = 4;
-                        weatherRisk = 3;
-                    }
-                    break;
-                case 'flood':
-                    if (coords[0] < 60 && coords[1] < 40) {
-                        riskData.weather.precipitation = 15;
-                        weatherRisk = 9;
-                    } else if (coords[0] < 60.5 && coords[1] < 41) {
-                        riskData.weather.precipitation = 10;
-                        weatherRisk = 7;
-                    } else {
-                        riskData.weather.precipitation = 5;
-                        weatherRisk = 4;
-                    }
-                    break;
-                case 'critical':
-                    if (coords[0] < 60) {
-                        riskData.weather.wind = 20;
-                        riskData.weather.precipitation = 20;
-                        riskData.weather.temperature = -15;
-                        weatherRisk = 10;
-                    } else {
-                        riskData.weather.temperature = -25;
-                        riskData.weather.precipitation = 10;
-                        riskData.weather.wind = 15;
-                        weatherRisk = 8;
-                    }
-                    break;
-            }
-            
-            riskData.riskLevel = weatherRisk;
-        }
-
         // Обновление попапов
         function updatePopups() {
             markers.forEach(item => {
@@ -1312,7 +1144,7 @@
         // Обвести область прямоугольником
         function highlightRegion() {
             removeRegion();
-            
+
             regionRectangle = L.rectangle(vologdaRegionBounds, {
                 color: '#6c757d',
                 weight: 3,
@@ -1320,7 +1152,7 @@
                 fillOpacity: 0.05,
                 opacity: 0.8
             }).addTo(map);
-            
+
             map.fitBounds(regionRectangle.getBounds());
         }
 
@@ -1335,12 +1167,12 @@
         // Фильтрация муниципалитетов
         function filterMunicipalities(filter) {
             currentFilter = filter;
-            
+
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
             event.target.classList.add('active');
-            
+
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             applyFilters(searchTerm);
         }
@@ -1348,20 +1180,20 @@
         // Применение фильтров
         function applyFilters(searchTerm = '') {
             let filtered = municipalities;
-            
+
             if (currentFilter === 'municipality') {
                 filtered = filtered.filter(m => m.type === 'municipality');
             } else if (currentFilter === 'city') {
                 filtered = filtered.filter(m => m.type === 'city');
             }
-            
+
             if (searchTerm) {
-                filtered = filtered.filter(m => 
-                    m.name.toLowerCase().includes(searchTerm) || 
+                filtered = filtered.filter(m =>
+                    m.name.toLowerCase().includes(searchTerm) ||
                     m.center.toLowerCase().includes(searchTerm)
                 );
             }
-            
+
             renderMunicipalitiesList(filtered);
         }
 
@@ -1369,14 +1201,14 @@
         function showAllMunicipalities() {
             clearMarkers();
             markers.forEach(item => {
-                if (currentFilter === 'all' || 
+                if (currentFilter === 'all' ||
                     (currentFilter === 'municipality' && item.municipality.type === 'municipality') ||
                     (currentFilter === 'city' && item.municipality.type === 'city')) {
                     item.marker.addTo(map);
                     currentMarkers.push(item.marker);
                 }
             });
-            
+
             if (currentMarkers.length > 0) {
                 const bounds = L.latLngBounds(currentMarkers.map(m => m.getLatLng()));
                 map.fitBounds(bounds);
@@ -1428,21 +1260,21 @@
             const list = document.getElementById('municipalityList');
             list.innerHTML = '';
 
-            const sortedMunicipalities = [...filteredMunicipalities].sort((a, b) => 
+            const sortedMunicipalities = [...filteredMunicipalities].sort((a, b) =>
                 parseInt(b.population) - parseInt(a.population)
             );
 
             sortedMunicipalities.forEach(municipality => {
                 const item = document.createElement('div');
                 item.className = 'municipality-item';
-                
+
                 let typeText = municipality.type === 'city' ? 'Городской округ' : 'Муниципальный район';
                 let populationText = formatPopulation(municipality.population);
                 const risk = currentRiskData[municipality.name];
                 const color = riskColors[risk.riskLevel];
                 const riskText = riskTexts[risk.riskLevel];
                 const fromApi = risk.fromApi || false;
-                
+
                 item.innerHTML = `
                     <div class="municipality-name">
                         <span class="risk-indicator" style="background-color: ${color}"></span>
@@ -1455,11 +1287,11 @@
                         Уровень риска: <span style="color: ${color}; font-weight: bold;">${riskText}</span>
                     </div>
                 `;
-                
+
                 item.addEventListener('click', () => {
                     showMunicipality(municipality);
                 });
-                
+
                 list.appendChild(item);
             });
         }
@@ -1472,8 +1304,7 @@
 
         // Автоматическое обновление данных
         function startAutoUpdate() {
-            // Обновляем каждые 10 минут
-            autoUpdateInterval = setInterval(updateWeatherData, 10 * 60 * 1000);
+            autoUpdateInterval = setInterval(updateWeatherData, 2 * 60 * 1000); // 2 минуты
         }
 
         // Инициализация при загрузке
