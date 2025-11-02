@@ -385,7 +385,7 @@ class PowerRiskBot:
         }
         
         for name, data in VOLOGDA_REGION_LOCATIONS.items():
-            if len(name) > 3 and not name.startswith(('имени', 'им ', 'великийустюг', 'кичменгский', 'тарногский', 'бабушкина')):
+            if len(name) > 3 and not name.startswith(('им ', 'великийустюг', 'кичменгский', 'тарногский', 'бабушкина')):
                 if data['type'] == 'город':
                     cities_by_type["Города"].append(name.title())
                 elif data['type'] == 'поселок':
