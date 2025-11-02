@@ -3,5 +3,6 @@ flask-cors
 requests
 python-telegram-bot
 aiohttp
-g4f
+g4f[all]
 python-dotenv
+
