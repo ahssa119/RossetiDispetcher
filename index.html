@@ -193,6 +193,27 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
+        /* Стили для иконки бригады */
+        .brigade-icon {
+            background: #ff6b00;
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: white;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .brigade-icon:hover {
+            transform: scale(1.3);
+            z-index: 1000;
+        }
+
         /* Легенда карты */
         .legend {
             position: absolute;
@@ -390,6 +411,61 @@
         .icon-btn:hover .icon-tooltip {
             opacity: 1;
         }
+
+        /* Статистика повреждений */
+        .damage-stats {
+            margin-top: 5px;
+            padding-top: 5px;
+            border-top: 1px dashed #ddd;
+            font-size: 11px;
+        }
+        .damage-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+        }
+        .damage-count {
+            font-weight: bold;
+        }
+        .damage-high {
+            color: #dc3545;
+        }
+        .damage-medium {
+            color: #fd7e14;
+        }
+        .damage-low {
+            color: #28a745;
+        }
+        
+        /* Стили для дополнительных бригад */
+        .brigade-icon-2 {
+            background: #17a2b8;
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: white;
+            font-weight: bold;
+        }
+        .brigade-icon-3 {
+            background: #6f42c1;
+            border: 3px solid white;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            color: white;
+            font-weight: bold;
+        }
     </style>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
@@ -436,7 +512,8 @@
                     <button class="btn" onclick="showAllMunicipalities()">Показать все</button>
                     <button class="btn" onclick="resetMap()">Сброс</button>
                     <button class="btn" onclick="highlightRegion()">Обвести область</button>
-                    <button class="btn" onclick="toggleRiskOverlay()" id="toggleRiskOverlayBtn">Скрыть overlay</button>
+                    <button class="btn" onclick="toggleRiskOverlay()" id="toggleRiskOverlayBtn">Скрыть цветную карту рисков</button>
+                    <button class="btn" onclick="toggleBrigades()" id="toggleBrigadesBtn">Скрыть бригады</button>
                 </div>
 
                 <div class="municipality-list" id="municipalityList">
@@ -553,6 +630,9 @@
         let currentRiskData = {};
         let riskOverlayVisible = true;
         let autoUpdateInterval = null;
+        let brigadeMarkers = [];
+        let brigadesVisible = true;
+        let brigadeIntervals = [];
 
         // Инициализация карты
         const map = L.map('map').setView([59.2181, 39.8886], 8);
@@ -676,13 +756,18 @@
                     currentRiskData[municipality.name] = {
                         riskLevel: demoMunicipality.risk_level,
                         weather: demoMunicipality.weather,
-                        fromApi: false
+                        fromApi: false,
+                        damages: 0,
+                        workingBrigades: 0
                     };
                 }
             });
 
             const riskMatrix = getDemoRiskMatrix();
             riskGrid = riskMatrix.grid;
+            
+            // Инициализируем бригады
+            initBrigades();
         }
 
         // Функция для обновления данных
@@ -702,7 +787,9 @@
                         currentRiskData[municipality.name] = {
                             riskLevel: apiMunicipality.risk_level,
                             weather: apiMunicipality.weather,
-                            fromApi: apiMunicipality.from_api
+                            fromApi: apiMunicipality.from_api,
+                            damages: calculateDamages(municipality, apiMunicipality.risk_level),
+                            workingBrigades: calculateWorkingBrigades(municipality, apiMunicipality.risk_level)
                         };
                     }
                 });
@@ -717,6 +804,7 @@
                 updatePopups();
                 createRiskOverlay(); // ПЕРЕСОЗДАЕМ OVERLAY С НОВЫМИ ДАННЫМИ
                 renderMunicipalitiesList();
+                updateBrigades();
 
                 if (data.data_source === 'realtime') {
                     showApiStatus('online', `✅ Реальные данные (${data.successful_requests}/${data.total_requests})`);
@@ -729,6 +817,57 @@
             } finally {
                 showLoading(false);
             }
+        }
+
+        // Расчет повреждений в зависимости от уровня риска и типа муниципалитета
+        function calculateDamages(municipality, riskLevel) {
+            const baseMultiplier = municipality.type === 'city' ? 2 : 1;
+            const populationFactor = Math.sqrt(parseInt(municipality.population) / 10000);
+            
+            if (riskLevel <= 3) return 0; // Отличные условия - нет повреждений
+            
+            let maxDamages;
+            if (riskLevel <= 6) {
+                maxDamages = 5; // Неудовлетворительные
+            } else if (riskLevel <= 8) {
+                maxDamages = 10; // Плохие
+            } else {
+                maxDamages = 17; // Опасные
+            }
+            
+            // Ограничиваем максимальное количество повреждений 20
+            const calculated = Math.floor(Math.random() * maxDamages * baseMultiplier * populationFactor);
+            return Math.min(20, Math.max(1, calculated)); // Минимум 1, максимум 20
+        }
+
+        // Расчет работающих бригад
+        function calculateWorkingBrigades(municipality, riskLevel) {
+            // Минимальное количество бригад по муниципалитету
+            let baseBrigades = 1; // Минимум 1 бригада в каждом муниципалитете
+            
+            // Дополнительные бригады для ключевых городов
+            if (municipality.name === "Вологда" || municipality.name === "Череповец" || municipality.name === "Великоустюгский") {
+                baseBrigades = 2;
+            }
+            
+            if (riskLevel <= 3) return 0; // Отличные условия - бригады не нужны
+            
+            const baseMultiplier = municipality.type === 'city' ? 1.5 : 1;
+            const populationFactor = Math.sqrt(parseInt(municipality.population) / 50000);
+            
+            if (riskLevel <= 6) {
+                // Неудовлетворительные - бригады примерно равны повреждениям, но не меньше baseBrigades
+                const calculated = Math.floor(Math.random() * 4 * baseMultiplier * populationFactor);
+                return Math.max(baseBrigades, calculated);
+            }
+            if (riskLevel <= 8) {
+                // Плохие
+                const calculated = Math.floor(Math.random() * 6 * baseMultiplier * populationFactor);
+                return Math.max(baseBrigades, calculated);
+            }
+            // Опасные
+            const calculated = Math.floor(Math.random() * 8 * baseMultiplier * populationFactor);
+            return Math.max(baseBrigades, calculated);
         }
 
         // Функции для управления данными
@@ -756,6 +895,7 @@
             updatePopups();
             createRiskOverlay();
             renderMunicipalitiesList();
+            updateBrigades();
         }
 
         // Отличные условия - всё зеленое
@@ -771,6 +911,8 @@
                     pressure: 1013.0
                 };
                 riskData.fromApi = false;
+                riskData.damages = 0;
+                riskData.workingBrigades = 0;
             });
             updateRiskGridUniform(2);
         }
@@ -788,6 +930,8 @@
                     pressure: 1005.0
                 };
                 riskData.fromApi = false;
+                riskData.damages = calculateDamages(municipality, 5);
+                riskData.workingBrigades = calculateWorkingBrigades(municipality, 5);
             });
             updateRiskGridUniform(5);
         }
@@ -805,6 +949,8 @@
                     pressure: 995.0
                 };
                 riskData.fromApi = false;
+                riskData.damages = calculateDamages(municipality, 7);
+                riskData.workingBrigades = calculateWorkingBrigades(municipality, 7);
             });
             updateRiskGridUniform(7);
         }
@@ -822,6 +968,8 @@
                     pressure: 985.0
                 };
                 riskData.fromApi = false;
+                riskData.damages = calculateDamages(municipality, 9);
+                riskData.workingBrigades = calculateWorkingBrigades(municipality, 9);
             });
             updateRiskGridUniform(9);
         }
@@ -847,6 +995,8 @@
                 riskData.riskLevel = riskLevel;
                 riskData.weather = getWeatherForRiskLevel(riskData.riskLevel);
                 riskData.fromApi = false;
+                riskData.damages = calculateDamages(municipality, riskLevel);
+                riskData.workingBrigades = calculateWorkingBrigades(municipality, riskLevel);
             });
             updateRiskGridStripes();
         }
@@ -895,6 +1045,209 @@
             setTimeout(() => {
                 map.invalidateSize();
             }, 300);
+        }
+
+        // Инициализация бригад
+        function initBrigades() {
+            updateBrigades();
+        }
+
+        // Обновление бригад на карте
+        function updateBrigades() {
+            // Останавливаем все предыдущие интервалы движения
+            brigadeIntervals.forEach(interval => clearInterval(interval));
+            brigadeIntervals = [];
+
+            // Удаляем старые бригады
+            brigadeMarkers.forEach(marker => {
+                map.removeLayer(marker);
+            });
+            brigadeMarkers = [];
+
+            // Добавляем бригады для каждого муниципалитета
+            municipalities.forEach(municipality => {
+                const riskData = currentRiskData[municipality.name];
+                const brigadeCount = riskData.workingBrigades;
+
+                if (brigadeCount > 0) {
+                    // Создаем бригады вокруг муниципалитета
+                    for (let i = 0; i < brigadeCount; i++) {
+                        const offsetLat = (Math.random() - 0.5) * 0.05;
+                        const offsetLng = (Math.random() - 0.5) * 0.05;
+                        
+                        const brigadeCoords = [
+                            municipality.coords[0] + offsetLat,
+                            municipality.coords[1] + offsetLng
+                        ];
+
+                        let iconClass, iconHtml;
+                        if (i === 0) {
+                            iconClass = 'brigade-icon';
+                            iconHtml = '🚗';
+                        } else if (i === 1) {
+                            iconClass = 'brigade-icon-2';
+                            iconHtml = '🔧';
+                        } else {
+                            iconClass = 'brigade-icon-3';
+                            iconHtml = '⚡';
+                        }
+
+                        const brigadeIcon = L.divIcon({
+                            className: iconClass,
+                            html: iconHtml,
+                            iconSize: [20, 20],
+                            iconAnchor: [10, 10]
+                        });
+
+                        const brigadeMarker = L.marker(brigadeCoords, { 
+                            icon: brigadeIcon,
+                            zIndexOffset: 1000
+                        }).addTo(map);
+
+                        // Создаем попап для бригады
+                        const brigadePopup = `
+                            <div class="risk-popup">
+                                <b>Бригада №${i + 1}</b><br>
+                                <div class="risk-details">
+                                    <div class="risk-factor">
+                                        <span>Рабочее состояние:</span>
+                                        <span>${getBrigadeStatus()}</span>
+                                    </div>
+                                    <div class="risk-factor">
+                                        <span>Муниципалитет:</span>
+                                        <span>${municipality.name}</span>
+                                    </div>
+                                    <div class="risk-factor">
+                                        <span>Количество человек:</span>
+                                        <span>4</span>
+                                    </div>
+                                    <div class="risk-factor">
+                                        <span>Статус:</span>
+                                        <span style="color: #28a745;">Активна</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+
+                        brigadeMarker.bindPopup(brigadePopup);
+                        brigadeMarkers.push(brigadeMarker);
+
+                        // Запускаем движение для этой бригады
+                        startBrigadeMovement(brigadeMarker, municipality, i + 1);
+                    }
+                }
+            });
+
+            // Обновляем видимость бригад
+            updateBrigadesVisibility();
+        }
+
+        // Движение бригады
+        function startBrigadeMovement(marker, municipality, brigadeNumber) {
+            const baseCoords = municipality.coords;
+            let currentCoords = marker.getLatLng();
+            
+            // Интервал движения - разная скорость для разных бригад
+            const speed = 3000 + Math.random() * 4000; // 3-7 секунд
+            
+            const interval = setInterval(() => {
+                if (!brigadesVisible) return;
+                
+                // Получаем текущие координаты
+                const currentLatLng = marker.getLatLng();
+                
+                // Генерируем случайное смещение (небольшое для естественного движения)
+                const latOffset = (Math.random() - 0.5) * 0.02;
+                const lngOffset = (Math.random() - 0.5) * 0.02;
+                
+                // Новые координаты (ограничиваем районом муниципалитета)
+                let newLat = currentLatLng.lat + latOffset;
+                let newLng = currentLatLng.lng + lngOffset;
+                
+                // Ограничиваем движение районом муниципалитета (±0.1 градуса от центра)
+                const maxOffset = 0.1;
+                newLat = Math.max(baseCoords[0] - maxOffset, Math.min(baseCoords[0] + maxOffset, newLat));
+                newLng = Math.max(baseCoords[1] - maxOffset, Math.min(baseCoords[1] + maxOffset, newLng));
+                
+                // Плавно перемещаем маркер
+                marker.setLatLng([newLat, newLng]);
+                
+                // Обновляем информацию в попапе
+                const newStatus = getBrigadeStatus();
+                const popupContent = `
+                    <div class="risk-popup">
+                        <b>Бригада №${brigadeNumber}</b><br>
+                        <div class="risk-details">
+                            <div class="risk-factor">
+                                <span>Рабочее состояние:</span>
+                                <span>${newStatus}</span>
+                            </div>
+                            <div class="risk-factor">
+                                <span>Муниципалитет:</span>
+                                <span>${municipality.name}</span>
+                            </div>
+                            <div class="risk-factor">
+                                <span>Количество человек:</span>
+                                <span>4</span>
+                            </div>
+                            <div class="risk-factor">
+                                <span>Статус:</span>
+                                <span style="color: #28a745;">Активна</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                marker.setPopupContent(popupContent);
+                
+            }, speed);
+            
+            brigadeIntervals.push(interval);
+        }
+
+        function getBrigadeStatus() {
+            const statuses = [
+                "Проводит диагностику",
+                "Выехала на объект", 
+                "Выполняет ремонтные работы",
+                "Проверяет оборудование",
+                "Осуществляет патрулирование",
+                "Готова к выезду",
+                "Находится на маршруте",
+                "Выполняет профилактику"
+            ];
+            return statuses[Math.floor(Math.random() * statuses.length)];
+        }
+
+        // Переключение видимости бригад
+        function toggleBrigades() {
+            const btn = document.getElementById('toggleBrigadesBtn');
+            
+            if (brigadesVisible) {
+                brigadeMarkers.forEach(marker => {
+                    map.removeLayer(marker);
+                });
+                btn.textContent = 'Показать бригады';
+                brigadesVisible = false;
+            } else {
+                brigadeMarkers.forEach(marker => {
+                    marker.addTo(map);
+                });
+                btn.textContent = 'Скрыть бригады';
+                brigadesVisible = true;
+            }
+        }
+
+        function updateBrigadesVisibility() {
+            if (brigadesVisible) {
+                brigadeMarkers.forEach(marker => {
+                    marker.addTo(map);
+                });
+            } else {
+                brigadeMarkers.forEach(marker => {
+                    map.removeLayer(marker);
+                });
+            }
         }
 
         // Создание overlay с закраской всей области
@@ -958,12 +1311,16 @@
                 pressure: 1013.0
             };
             let fromApi = false;
+            let damages = 0;
+            let workingBrigades = 0;
 
             if (nearestMunicipality) {
                 const municipalityRisk = currentRiskData[nearestMunicipality.name];
                 riskLevel = municipalityRisk.riskLevel;
                 weatherData = municipalityRisk.weather;
                 fromApi = municipalityRisk.fromApi || false;
+                damages = municipalityRisk.damages || 0;
+                workingBrigades = municipalityRisk.workingBrigades || 0;
             }
 
             const color = riskColors[riskLevel];
@@ -1001,6 +1358,19 @@
                             <span>Давление:</span>
                             <span>${weatherData.pressure} hPa</span>
                         </div>
+                        ${damages > 0 || workingBrigades > 0 ? `
+                        <div class="damage-stats">
+                            <b>Статистика повреждений:</b>
+                            <div class="damage-item">
+                                <span>Повреждения ЛЭП:</span>
+                                <span class="damage-count ${damages > 10 ? 'damage-high' : damages > 5 ? 'damage-medium' : 'damage-low'}">${damages}</span>
+                            </div>
+                            <div class="damage-item">
+                                <span>Работающие бригады:</span>
+                                <span class="damage-count">${workingBrigades}</span>
+                            </div>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -1097,6 +1467,8 @@
             const color = riskColors[risk.riskLevel];
             const riskText = riskTexts[risk.riskLevel];
             const fromApi = risk.fromApi || false;
+            const damages = risk.damages || 0;
+            const workingBrigades = risk.workingBrigades || 0;
 
             return `
                 <div class="risk-popup">
@@ -1129,6 +1501,19 @@
                             <span>Давление:</span>
                             <span>${risk.weather.pressure} hPa</span>
                         </div>
+                        ${damages > 0 || workingBrigades > 0 ? `
+                        <div class="damage-stats">
+                            <b>Статистика повреждений:</b>
+                            <div class="damage-item">
+                                <span>Повреждения ЛЭП:</span>
+                                <span class="damage-count ${damages > 10 ? 'damage-high' : damages > 5 ? 'damage-medium' : 'damage-low'}">${damages}</span>
+                            </div>
+                            <div class="damage-item">
+                                <span>Работающие бригады:</span>
+                                <span class="damage-count">${workingBrigades}</span>
+                            </div>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -1274,6 +1659,8 @@
                 const color = riskColors[risk.riskLevel];
                 const riskText = riskTexts[risk.riskLevel];
                 const fromApi = risk.fromApi || false;
+                const damages = risk.damages || 0;
+                const workingBrigades = risk.workingBrigades || 0;
 
                 item.innerHTML = `
                     <div class="municipality-name">
@@ -1285,6 +1672,18 @@
                         ${typeText} • Население: ${populationText}<br>
                         Центр: ${municipality.center}<br>
                         Уровень риска: <span style="color: ${color}; font-weight: bold;">${riskText}</span>
+                        ${damages > 0 || workingBrigades > 0 ? `
+                        <div class="damage-stats">
+                            <div class="damage-item">
+                                <span>Повреждения:</span>
+                                <span class="damage-count ${damages > 10 ? 'damage-high' : damages > 5 ? 'damage-medium' : 'damage-low'}">${damages}</span>
+                            </div>
+                            <div class="damage-item">
+                                <span>Бригады:</span>
+                                <span class="damage-count">${workingBrigades}</span>
+                            </div>
+                        </div>
+                        ` : ''}
                     </div>
                 `;
 
